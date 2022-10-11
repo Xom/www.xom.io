@@ -1,0 +1,20 @@
+<html>
+<script type='text/javascript' src='funnynames.js'></script>
+<script type="text/javascript">
+
+    function getName()
+    {
+        var myName = funnynames.randomName();
+        document.getElementsByTagName('div')[0].innerHTML = myName;
+        var prevLog = document.getElementById("prevlog");
+        prevLog.value = myName + "\n" + prevlog.value;
+    }
+
+</script>
+</head>
+<body>
+<button type="button" onClick="getName()">Go!</button>
+<h1><div></div></h1>
+<textarea cols="70" rows="10" id="prevlog"></textarea>
+</body>
+</html>
