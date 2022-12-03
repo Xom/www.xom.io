@@ -298,8 +298,7 @@ window.addEventListener('load', function () {
 function readFile (input) {
   const file = input.files[0];
   const reader = new FileReader();
-  const beginning = `<tr><td>${file.name}</td><td class="num"><a href="tinyview.html?`;
-  reader.addEventListener('load', function () {
+  reader.addEventListener('load', async function () {
     const s = this.result;
     const myTBody = document.getElementById('myTBody');
     let i = 0;
@@ -312,8 +311,9 @@ function readFile (input) {
       while (qLast.trim() === '') {
         qLast = qTokens.pop();
       }
-      const label = qLast[0] === '#' ? `<td>${qLast.slice(1)}</td>` : '<td></td>';
-      if (qLast[0] === '#') {
+      const label = document.createElement("td");
+      if (qLast[0] === "#") {
+        label.textContent = qLast.slice(1);
         qLast = qTokens.pop();
       }
       const qScore = [];
@@ -322,8 +322,40 @@ function readFile (input) {
         qLast = qTokens.pop();
       }
       qTokens.push(qLast);
-      myTBody.innerHTML += `${beginning}${line}">${i}</a></td>${label}<td class="num">${qScore.length >= 10 ? qScore[9] : ''}</td><td class="num score">${qScore[0]}</td><td class="num score">${qScore[1]}</td><td class="num score">${qScore[2]}</td><td class="num score">${qScore[3]}</td><td class="num score">${qScore[4]}</td><td class="num score">${qScore[5]}</td><td class="num score">${qScore[6]}</td><td class="num score">${qScore[7]}</td><td class="num score">${qScore[8]}</td></tr>`;
+
+      const lineNumber = document.createElement("td");
+      lineNumber.classList.add('num');
+      const link = document.createElement("a");
+      link.href = `tinyview.html?${line}`;
+      link.textContent = i;
+      lineNumber.appendChild(link);
+
+      const row = document.createElement("tr");
+      const filenameCell = document.createElement('td');
+      filenameCell.textContent = file.name;
+      row.appendChild(filenameCell);
+      row.appendChild(lineNumber);
+      row.appendChild(label);
+
+      const randomMoves = document.createElement("td");
+      randomMoves.classList.add('num');
+      if (qScore.length >= 10) {
+        randomMoves.textContent = qScore[9];
+      }
+      row.appendChild(randomMoves);
+
+      for (let j = 0; j < 9; j++) {
+        const score = document.createElement("td");
+        score.classList.add("num", "score");
+        score.textContent = qScore[j];
+        row.appendChild(score);
+      }
+
+      myTBody.appendChild(row);
       i++;
+      if (i % 256 === 0) {
+        await new Promise(resolve => setTimeout(resolve, 0));
+      }
     }
   });
   reader.readAsText(file);
