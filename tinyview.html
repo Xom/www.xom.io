@@ -660,6 +660,7 @@ class Board {
       if (this.drawingsCompleted === 3) {
         return;
       }
+      this.lastInk = this.ink;
       this.ink = 0;
       this.placementsUntilDraw = this.drawingsCompleted === 2 ? 8 : 9;
       for (let zz = 0; zz < 81; zz++) {
@@ -1390,6 +1391,7 @@ function showBoard () {
         grid.push(qBoards[qPos - 1].land[z] === board.land[z] ? 0 : 1);
       }
       html += heatGrid(grid, 1);
+      html += `<br><span style="font-size:smaller">${qPos === 29 ? board.ink : board.lastInk} ink used.</span>`;
       if (qPos === 29) {
         html += '<br>';
         for (let t = 0; t <= 8; t++) {
