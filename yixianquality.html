@@ -1,0 +1,233 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <title>Yi Xian Quality Score</title>
+  <style>
+    body {
+      margin: 2rem;
+    }
+    .section {
+      margin-bottom: 1rem;
+    }
+    .inline {
+      display: flex;
+      align-items: center;
+      gap: 1rem;
+      flex-wrap: wrap;
+    }
+    .compact-input {
+      width: 4em;
+      padding: 0.3rem;
+    }
+    input[type="text"], input[type="number"]:not(.compact-input) {
+      width: 250px;
+      padding: 0.3rem;
+    }
+    button {
+      padding: 0.5rem 1rem;
+      margin-right: 1rem;
+    }
+    #results span {
+      font-weight: bold;
+    }
+  </style>
+</head>
+<body>
+  <h1>Yi Xian Quality Score</h1>
+  <br/>
+
+  <!-- Card count fields -->
+  <div class="section inline">
+    <label><input type="radio" name="preset" value="non-five-elements" checked> non-Five-Elements (56+11)</label>
+    <label><input type="radio" name="preset" value="five-elements"> Five Elements (56+10)</label>
+    <label><input type="radio" name="preset" value="custom"> custom</label>
+  </div>
+  <div class="section inline">
+    <label for="nonIncarnation">Non-Incarnation cards in pool:</label>
+    <input type="number" id="nonIncarnation" class="compact-input" value="56" min="0">
+    <label for="incarnation">Incarnation cards in pool:</label>
+    <input type="number" id="incarnation" class="compact-input" value="11" min="0">
+  </div>
+  <br/>
+
+  <!-- Deck contents -->
+  <div class="section" style="font-size: smaller">
+    Specify the number of copies of each unique card in the deck. For example, for Heavenly Marrow (lv.2) + Water Formation + Echo Formation + Great Waves (lv.max) + Great Waves + Great Waves + Combine Rivers + Combine Rivers, input 16 and 212.
+  </div>
+  <div class="section inline">
+    <label for="nonIncContent">Non-Incarnation cards:</label>
+    <input type="text" id="nonIncContent" placeholder="e.g. 16">
+    <label for="incContent">Incarnation cards:</label>
+    <input type="text" id="incContent" placeholder="e.g. 212">
+  </div>
+  <br/>
+
+  <!-- Monte Carlo trials -->
+  <div class="section inline">
+    <label for="trials">Monte Carlo trials:</label>
+    <input type="number" id="trials" value="100000" min="1">
+    <button id="runBtn">Run</button>
+  </div>
+  <br/>
+
+  <!-- Run + Results -->
+  <div class="section" id="results">
+    <p>Score: <span id="score">N/A</span></p>
+    <p>Trials: <span id="trialCount">0</span></p>
+  </div>
+  <div class="section">
+    <button id="resetBtn">Reset</button>
+  </div>
+  <br/>
+
+  <div class="section" style="font-size: smaller">
+    <p>Explanation:</p>
+    <p>I've occasionally wondered how to compare the quality of two boards. Lately, I've been playing characters who try to spend all their exchanges at Incarnation, which suggests a simplification.</p>
+    <p>Let the "raw quality score" of a deck be the expected percentage of the pool that must be traversed to assemble it. Since we care about comparison, it's OK that all cards start in the pool, and we ignore pool-thinning, since it's a wash if we ignore it for all decks. We acknowledge the distortion relative to the actual game where some cards can be found before Incarnation, and don't attempt to correct for it.</p>
+    <p>However, it is a bit sensitive to wanting 4+ of some Incarnation card, therefore, let the "standard quality score" be the expected percentage to "almost-assemble" it. That is, we allow one copy of one card to be missing.</p>
+    <p>Let the "theoretical quality score" be the expected percentage to almost-assemble the deck in question or any similar, superior version (which might not use a superset of the same cards), where "similar" and "superior" are not formally defined. One example of "similar" might be Stygian Moonlight + Crash Citta-Dharma + Styx Agility + Stygian Night + Blink + anything + anything + anything, where "superior" means same-or-more damage.</p>
+    <p>The raw quality score can be computed using numerical integration, but "almost-assemble" pretty much requires Monte Carlo simulation. This page calculates the standard quality score.</p>
+    <p>Note: The score is relative to the typical non-Five-Elements pool size with 514 cards. Under this definition, a Five Elements deck can score no more than 508/514 * 100, because the pool is exhausted at 508 cards. (Unless it scores infinity because it requires multiple Enlightenment Elixirs or something.)</p>
+  </div>
+
+  <script>
+    const nonIncField = document.getElementById('nonIncarnation');
+    const incField = document.getElementById('incarnation');
+    const presetRadios = document.querySelectorAll('input[name="preset"]');
+    const runBtn = document.getElementById('runBtn');
+    const resetBtn = document.getElementById('resetBtn');
+    const scoreDisplay = document.getElementById('score');
+    const trialCountDisplay = document.getElementById('trialCount');
+
+    const presets = {
+      'non-five-elements': { nonInc: 56, inc: 11 },
+      'five-elements': { nonInc: 56, inc: 10 }
+    };
+
+    function setFields(nonInc, inc) {
+      nonIncField.value = nonInc;
+      incField.value = inc;
+    }
+
+    function updateRadioBasedOnFields() {
+      const currentNonInc = parseInt(nonIncField.value, 10);
+      const currentInc = parseInt(incField.value, 10);
+      let matched = false;
+      for (const [key, values] of Object.entries(presets)) {
+        if (currentNonInc === values.nonInc && currentInc === values.inc) {
+          document.querySelector(`input[value="${key}"]`).checked = true;
+          matched = true;
+          break;
+        }
+      }
+      if (!matched) {
+        document.querySelector(`input[value="custom"]`).checked = true;
+      }
+    }
+
+    presetRadios.forEach(radio => {
+      radio.addEventListener('change', () => {
+        const selected = radio.value;
+        if (selected === 'custom') return;
+        const { nonInc, inc } = presets[selected];
+        setFields(nonInc, inc);
+      });
+    });
+
+    nonIncField.addEventListener('input', updateRadioBasedOnFields);
+    incField.addEventListener('input', updateRadioBasedOnFields);
+
+    function buildSubpool(nonIncStr, incStr) {
+      const pool = [];
+      for (let i = 0; i < nonIncStr.length; i++) {
+        const count = parseInt(nonIncStr[i], 10);
+        const cardID = i + 1;
+        for (let j = 0; j < 8; j++) {
+          pool.push(cardID);
+        }
+      }
+      for (let i = 0; i < incStr.length; i++) {
+        const count = parseInt(incStr[i], 10);
+        const cardID = -(i + 1);
+        for (let j = 0; j < 6; j++) {
+          pool.push(cardID);
+        }
+      }
+      return pool;
+    }
+
+    function getDeckRequirements(nonIncStr, incStr) {
+      const req = new Map();
+      for (let i = 0; i < nonIncStr.length; i++) {
+        req.set(i + 1, parseInt(nonIncStr[i], 10));
+      }
+      for (let i = 0; i < incStr.length; i++) {
+        req.set(-(i + 1), parseInt(incStr[i], 10));
+      }
+      return req;
+    }
+
+    function meetsAlmostRequirement(req, have) {
+      let shortfalls = 0;
+      for (const [card, need] of req.entries()) {
+        const got = have.get(card) || 0;
+        if (got < need) {
+          shortfalls += (need - got);
+          if (shortfalls > 1) return false;
+        }
+      }
+      return shortfalls <= 1;
+    }
+
+    function runTrial(nonIncStr, incStr) {
+      const req = getDeckRequirements(nonIncStr, incStr);
+      const subpool = buildSubpool(nonIncStr, incStr);
+      const have = new Map();
+      let draws = 0;
+      let remaining = subpool.length;
+
+      while (remaining > 0) {
+        const idx = Math.floor(Math.random() * remaining);
+        const card = subpool[idx];
+        draws++;
+        have.set(card, (have.get(card) || 0) + 1);
+        subpool[idx] = subpool[--remaining];
+        if (meetsAlmostRequirement(req, have)) break;
+      }
+
+      const currentNonInc = parseInt(nonIncField.value, 10);
+      const currentInc = parseInt(incField.value, 10);
+      const x = (currentNonInc * 8) + (currentInc * 6);
+
+      return x * draws / ((subpool.length + 1) * 5.14);
+    }
+
+    runBtn.addEventListener('click', () => {
+      const nonIncStr = document.getElementById('nonIncContent').value.trim();
+      const incStr = document.getElementById('incContent').value.trim();
+      const newTrials = parseInt(document.getElementById('trials').value, 10) || 1;
+
+      let newSum = 0;
+      for (let i = 0; i < newTrials; i++) {
+        newSum += runTrial(nonIncStr, incStr);
+      }
+
+      const prevTrials = parseInt(trialCountDisplay.textContent, 10) || 0;
+      const totalTrials = prevTrials + newTrials;
+
+      const prevAvg = scoreDisplay.textContent === "N/A" ? 0 : parseFloat(scoreDisplay.textContent);
+      const newAvg = newSum / newTrials;
+      const weightedAvg = ((prevAvg * prevTrials) + newSum) / totalTrials;
+
+      scoreDisplay.textContent = weightedAvg.toFixed(2);
+      trialCountDisplay.textContent = totalTrials;
+    });
+
+    resetBtn.addEventListener('click', () => {
+      scoreDisplay.textContent = "N/A";
+      trialCountDisplay.textContent = "0";
+    });
+  </script>
+</body>
+</html>
